@@ -30,6 +30,84 @@ Este proyecto corresponde a la **Semana 14** del curso de Seguridad y Privacidad
 | 🕵️ **Investigación de Incidentes**      | Filtrado de eventos por palabra clave (por ejemplo, “export” o “borrar”).  |
 
 ---
+# EVALUACIÓN TÉCNICA: ANÁLISIS Y MEJORA DE SEGURIDAD EN APLICACIÓN ANDROID
+
+## Parte 1: ANÁLISIS DE SEGURIDAD BÁSICO
+
+### 1.1 IDENTIFICACIÓN DE VULNERABILIDADES
+
+#### 1.1.1. ¿Qué método de encriptación se utiliza para proteger datos sensibles?
+El método de encriptación utilizado es **AES-256-GCM**.
+- **AES-256-GCM** es un algoritmo de encriptación simétrica de 256 bits que proporciona tanto confidencialidad (encriptación) como autenticación (integridad de los datos).
+- Se utiliza para encriptar datos sensibles en el método `storeSecureData()` mediante **EncryptedSharedPreferences**.
+
+#### 1.1.2. Identifica al menos 2 posibles vulnerabilidades en la implementación actual del logging
+
+**A. Almacenamiento de logs no encriptados:**
+- El archivo de logs de acceso (`access_logPrefs`) no se cifra. Este almacenamiento solo utiliza **SharedPreferences** normales para guardar los logs en texto claro.
+- **Riesgo**: Si alguien tiene acceso a la memoria del dispositivo (por ejemplo, con acceso root o mediante un ataque físico), podría obtener información sensible de los logs. Esto es especialmente riesgoso si se registran eventos sensibles como el acceso a datos o la limpieza de datos.
+
+**B. No hay control de acceso ni autenticación para el acceso a los logs:**
+- El sistema de logs no tiene ningún tipo de control de acceso o autenticación. Cualquier parte de la aplicación puede acceder a los logs a través de `accessLogPrefs`, lo cual representa un punto de fuga de información.
+- **Riesgo**: Un atacante con acceso a la app podría manipular o leer estos logs, obteniendo información sobre las acciones del usuario o incluso intentando entender patrones que podrían ayudar en un ataque más sofisticado.
+
+#### 1.1.3. ¿Qué sucede si falla la inicialización del sistema de encriptación?
+Si la inicialización del sistema de encriptación falla (por ejemplo, si no se puede crear la clave maestra o la encriptación no está disponible por alguna razón), el flujo entra en el bloque **catch** y se usa una implementación de respaldo.
+
+### 1.2 PERMISOS Y MANIFIESTO
+
+#### 1.2.1. Lista todos los permisos peligrosos declarados en el manifiesto
+
+| Permiso                                    | Grupo            | Descripción                                                          |
+|--------------------------------------------|------------------|----------------------------------------------------------------------|
+| `android.permission.CAMERA`               | Cámara           | Acceso a la cámara.                                                  |
+| `android.permission.READ_EXTERNAL_STORAGE` | Almacenamiento   | Acceso al almacenamiento externo (obsoleto desde API 33+).           |
+| `android.permission.READ_MEDIA_IMAGES`    | Imágenes (API 33+)| Leer imágenes del almacenamiento a partir de Android 13.             |
+| `android.permission.RECORD_AUDIO`         | Micrófono        | Grabar audio.                                                        |
+| `android.permission.READ_CONTACTS`        | Contactos        | Leer contactos del usuario.                                           |
+| `android.permission.CALL_PHONE`           | Teléfono         | Realizar llamadas telefónicas.                                       |
+| `android.permission.SEND_SMS`             | SMS              | Enviar mensajes SMS.                                                 |
+| `android.permission.ACCESS_COARSE_LOCATION`| Ubicación       | Obtener ubicación aproximada.                                        |
+
+#### 1.2.2. ¿Qué patrón se utiliza para solicitar permisos en runtime?
+Se utiliza el patrón **Activity Result API**, que es la forma recomendada desde AndroidX.
+
+```kotlin
+private val requestPermissionLauncher = registerForActivityResult(
+    ActivityResultContracts.RequestPermission()
+) { isGranted -> 
+    // lógica cuando se responde al permiso
+}
+```
+
+#### 1.2.3. Identifica qué configuración de seguridad previene backups automáticos
+
+```xml
+<application
+    android:allowBackup="false"
+    android:backupAgent="null"
+</application>
+```
+Esto hace que se desactive el sistema de backup automático de Android, que de lo contrario guardaría datos de la app en la cuenta de Google del usuario.
+Esto evita posibles fugas de datos sensibles si el usuario cambia de dispositivo o rootea el sistema.
+
+### 1.3 GESTIÓN DE ARCHIVOS
+
+#### 1.3.1. ¿Cómo se implementa la compartición segura de archivos de imágenes?
+La compartición segura se logra utilizando el **FileProvider** para generar un URI de contenido que apunta a la imagen almacenada en el directorio privado de la app, lo cual protege el acceso directo al sistema de archivos del dispositivo.
+
+#### 1.3.2 ¿Qué autoridad se utiliza para el FileProvider?
+La autoridad que se utiliza para el **FileProvider** es un nombre único que debe ser declarado en el manifiesto. En este caso, se ha usado `"com.example.app.fileprovider"`, que debe coincidir con la autoridad declarada en el archivo `AndroidManifest.xml` y utilizada en `FileProvider.getUriForFile()`.
+
+#### 1.3.3. Explica por qué no se debe usar file:// URIs directamente
+El uso de **file:// URIs** directamente está desaconsejado debido a que este tipo de URI expone rutas completas del sistema de archivos local, lo cual podría poner en riesgo la privacidad del usuario y abrir posibles brechas de seguridad.
+
+**Problemas de seguridad:**
+- **Seguridad**: Acceder a archivos con **file://** expone directamente los archivos a otras aplicaciones sin restricciones, lo que puede permitir acceso no autorizado a datos sensibles.
+- **Compatibilidad**: Desde Android 7.0 (API 24), el uso de **file://** se ha restringido debido a problemas de seguridad. Esto puede hacer que el acceso a archivos falle en dispositivos con versiones recientes de Android.
+- **Restricciones de permisos**: Android requiere el uso de **ContentProvider** para gestionar el acceso a archivos, asegurando que solo las aplicaciones con permisos adecuados puedan acceder a los datos.
+
+---
 
 # 📸 Capturas de pantalla
 
